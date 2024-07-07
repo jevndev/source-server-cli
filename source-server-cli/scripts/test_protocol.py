@@ -6,6 +6,9 @@ import socket
 import struct
 import sys
 
+import rich.table
+from rich import print
+
 SERVER_DATA_POST_STRINGS_PATTERN = "hccccccc"
 SERVER_DATA_STRUCT_SIZE = struct.calcsize(SERVER_DATA_POST_STRINGS_PATTERN)
 
@@ -257,8 +260,14 @@ def process_server_players_command(s):
     header = server_players_response[:5]
     assert header == b"\xff\xff\xff\xff\x44", header
     (player_count,) = struct.unpack("h", server_players_response[5:7])
-    print(f"player_count: {player_count}")
     current_byte_index = 6
+    table = rich.table.Table(title=f"Players ({player_count})")
+
+    print("")
+    table.add_column("Name", justify="left", style="cyan", no_wrap=True)
+    table.add_column("Score", style="magenta", justify="center")
+    table.add_column("Playtime", justify="center", style="green")
+
     for i in range(player_count):
         last_byte_index = current_byte_index
         (index,) = struct.unpack(
@@ -281,7 +290,17 @@ def process_server_players_command(s):
         )
         current_byte_index += 4
 
-        print(f"{name:<25} - {score:<4} - {duration}")
+        hours = duration.seconds // 3600
+        minutes = (duration.seconds % 3600) // 60
+        seconds = duration.seconds % 60
+
+        table.add_row(
+            name,
+            str(score),
+            f"{hours:02}:{minutes:02}:{seconds:02}",
+        )
+
+    print(table)
 
 
 def process_server_info_command(s):
