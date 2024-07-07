@@ -5,7 +5,6 @@ import datetime
 import socket
 import struct
 import sys
-from random import choice
 
 SERVER_DATA_POST_STRINGS_PATTERN = "hccccccc"
 SERVER_DATA_STRUCT_SIZE = struct.calcsize(SERVER_DATA_POST_STRINGS_PATTERN)
