@@ -1,1 +1,2 @@
 source-server-cli/target/**
+source-server-cli/Cargo.lock
