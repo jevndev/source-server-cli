@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import argparse
+import datetime
 import socket
 import struct
 import sys
+from random import choice
 
 SERVER_DATA_POST_STRINGS_PATTERN = "hccccccc"
 SERVER_DATA_STRUCT_SIZE = struct.calcsize(SERVER_DATA_POST_STRINGS_PATTERN)
@@ -210,58 +213,120 @@ def get_string_from_data(data, start):
 def main():
     ip, port = sys.argv[1:3]
 
+    parser = argparse.ArgumentParser(description="Query Source Engine servers")
+
+    parser.add_argument("ip", type=str, help="IP address of the server")
+    parser.add_argument("port", type=int, help="Port of the server")
+    parser.add_argument(
+        "query", choices=["info", "players"], help="Query type", type=str.lower
+    )
+
+    args = parser.parse_args()
+
+    query_bytes = {
+        "info": b"\x54",
+        "players": b"\x55",
+    }
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect((ip, int(port)))
-    s.send(b"\xff\xff\xff\xff\x54Source Engine Query\x00")
+    s.send(b"\xff\xff\xff\xff" + query_bytes[args.query] + b"Source Engine Query\x00")
     response = s.recv(1024)
 
     byte_list = [hex(b) for b in response]
 
     command = byte_list[4]
 
-    if command == "0x41":
-        s.send(b"\xff\xff\xff\xff\x54Source Engine Query\x00" + response[5:])
-        server_info_response = s.recv(4096)
-        # get first two bytes
-        server_info_response_id = server_info_response[:4]
-        assert server_info_response_id == b"\xff\xff\xff\xff", server_info_response_id
-        server_info_response_header = server_info_response[4:5]
-        assert server_info_response_header == b"\x49", server_info_response_header
-        start_of_strings = 5
+    if server_sent_challenge(command):
+        if args.query == "info":
+            send_challenge_response(s, response, "\x49")
+            process_server_info_command(s)
+        elif args.query == "players":
+            send_players_challenge_response(s, response)
+            process_server_players_command(s)
 
-        server_name, end_of_name = get_string_from_data(
-            server_info_response, start_of_strings
+    s.close()
+
+
+def send_players_challenge_response(s, response):
+    challenge_response = b"\xff\xff\xff\xff\x55" + response[5:]
+    s.send(challenge_response)
+
+
+def process_server_players_command(s):
+    server_players_response = s.recv(4096 * 100)
+    header = server_players_response[:5]
+    assert header == b"\xff\xff\xff\xff\x44", header
+    (player_count,) = struct.unpack("h", server_players_response[5:7])
+    print(f"player_count: {player_count}")
+    current_byte_index = 6
+    for i in range(player_count):
+        last_byte_index = current_byte_index
+        (index,) = struct.unpack(
+            "b", server_players_response[current_byte_index : current_byte_index + 1]
         )
-        map_string, end_of_map_string = get_string_from_data(
-            server_info_response, end_of_name
-        )
-        folder_name, end_of_folder_name = get_string_from_data(
-            server_info_response, end_of_map_string
-        )
-        game_name, end_of_game_name = get_string_from_data(
-            server_info_response, end_of_folder_name
-        )
-        print(f"server_name: {str(server_name)}")
-        print(f"map_string: {str(map_string)}")
-        print(f"folder_name: {str(folder_name)}")
-        print(f"game_name: {str(game_name)}")
-        (
-            game_id,
-            players,
-            max_players,
-            bots,
-            server_type,
-            environment,
-            visibility,
-            vac,
-        ) = struct.unpack(
-            SERVER_DATA_POST_STRINGS_PATTERN,
-            server_info_response[
-                end_of_game_name : SERVER_DATA_STRUCT_SIZE + end_of_game_name
-            ],
+        current_byte_index += 1
+        name, current_byte_index = get_string_from_data(
+            server_players_response, current_byte_index
         )
 
-        print(f"""
+        score = struct.unpack(
+            "i", server_players_response[current_byte_index : current_byte_index + 4]
+        )[0]
+        current_byte_index += 4
+        duration = datetime.timedelta(
+            seconds=struct.unpack(
+                "f",
+                server_players_response[current_byte_index : current_byte_index + 4],
+            )[0]
+        )
+        current_byte_index += 4
+
+        print(f"{name:<25} - {score:<4} - {duration}")
+
+
+def process_server_info_command(s):
+    server_info_response = s.recv(4096)
+    # get first two bytes
+    server_info_response_id = server_info_response[:4]
+    assert server_info_response_id == b"\xff\xff\xff\xff", server_info_response_id
+    server_info_response_header = server_info_response[4:5]
+    assert server_info_response_header == b"\x49", server_info_response_header
+    start_of_strings = 5
+
+    server_name, end_of_name = get_string_from_data(
+        server_info_response, start_of_strings
+    )
+    map_string, end_of_map_string = get_string_from_data(
+        server_info_response, end_of_name
+    )
+    folder_name, end_of_folder_name = get_string_from_data(
+        server_info_response, end_of_map_string
+    )
+    game_name, end_of_game_name = get_string_from_data(
+        server_info_response, end_of_folder_name
+    )
+    print(f"server_name: {str(server_name)}")
+    print(f"map_string: {str(map_string)}")
+    print(f"folder_name: {str(folder_name)}")
+    print(f"game_name: {str(game_name)}")
+    (
+        game_id,
+        players,
+        max_players,
+        bots,
+        server_type,
+        environment,
+        visibility,
+        vac,
+    ) = struct.unpack(
+        SERVER_DATA_POST_STRINGS_PATTERN,
+        server_info_response[
+            end_of_game_name : SERVER_DATA_STRUCT_SIZE + end_of_game_name
+        ],
+    )
+
+    print(f"""
 game_id: {game_id} ({game_dict.get(game_id, "Unknown")})
 players: {int.from_bytes(players, byteorder='big')}
 max_players: {int.from_bytes(max_players, byteorder='big')}
@@ -271,66 +336,73 @@ environment: {environment_dict.get(environment, "Unknown")}
 visibility: {'Public' if visibility == 0 else 'Private'}
 vac: {'secured' if vac == 1 else 'Unsecured'}""")
 
-        current_byte_index = SERVER_DATA_STRUCT_SIZE + end_of_game_name
-        if server_game_is_the_ship(game_id):
-            the_ship_modes, game_mode, game_map, duration = get_the_ship_data(
-                server_info_response, end_of_game_name
-            )
-            format_the_ship_data(the_ship_modes, game_mode, game_map, duration)
-            current_byte_index += struct.calcsize("ccc")
+    current_byte_index = SERVER_DATA_STRUCT_SIZE + end_of_game_name
+    if server_game_is_the_ship(game_id):
+        the_ship_modes, game_mode, game_map, duration = get_the_ship_data(
+            server_info_response, end_of_game_name
+        )
+        format_the_ship_data(the_ship_modes, game_mode, game_map, duration)
+        current_byte_index += struct.calcsize("ccc")
 
-        version_string, end_of_version_string = get_string_from_data(
+    version_string, end_of_version_string = get_string_from_data(
+        server_info_response, current_byte_index
+    )
+    print(f"version_string: {version_string}")
+
+    extra_data_flag_struct = "c"
+    extra_data_flag_struct_size = struct.calcsize(extra_data_flag_struct)
+    extra_data_flag_bytes = server_info_response[
+        end_of_version_string : end_of_version_string + extra_data_flag_struct_size
+    ]
+    extra_data_flag = int.from_bytes(
+        struct.unpack(extra_data_flag_struct, extra_data_flag_bytes)[0],
+        byteorder="big",
+    )
+
+    current_byte_index = end_of_version_string + extra_data_flag_struct_size
+
+    if extra_data_flag & b"\x80"[0]:
+        port = struct.unpack(
+            "h", server_info_response[current_byte_index : current_byte_index + 2]
+        )[0]
+        print(f"port: {port}")
+        current_byte_index += 2
+    if extra_data_flag & b"\x10"[0]:
+        server_id = struct.unpack(
+            "q", server_info_response[current_byte_index : current_byte_index + 8]
+        )[0]
+        print(f"server_id: {server_id}")
+        current_byte_index += 8
+    if extra_data_flag & b"\x40"[0]:
+        port = struct.unpack(
+            "h",
+            server_info_response[current_byte_index : current_byte_index + 2],
+        )[0]
+        print(f"port: {port}")
+        current_byte_index += 2
+        name, current_byte_index = get_string_from_data(
             server_info_response, current_byte_index
         )
-        print(f"version_string: {version_string}")
-
-        extra_data_flag_struct = "c"
-        extra_data_flag_struct_size = struct.calcsize(extra_data_flag_struct)
-        extra_data_flag_bytes = server_info_response[
-            end_of_version_string : end_of_version_string + extra_data_flag_struct_size
-        ]
-        extra_data_flag = int.from_bytes(
-            struct.unpack(extra_data_flag_struct, extra_data_flag_bytes)[0],
-            byteorder="big",
+        print(f"name: {name}")
+    if extra_data_flag & b"\x20"[0]:
+        keys, current_byte_index = get_string_from_data(
+            server_info_response, current_byte_index
         )
+    if extra_data_flag & b"\x01"[0]:
+        game_id = struct.unpack(
+            "l",
+            server_info_response[current_byte_index : current_byte_index + 8],
+        )[0]
+        print(f"game_id: {game_id} ({game_dict.get(game_id, 'Unknown')})")
 
-        current_byte_index = end_of_version_string + extra_data_flag_struct_size
 
-        if extra_data_flag & b"\x80"[0]:
-            port = struct.unpack(
-                "h", server_info_response[current_byte_index : current_byte_index + 2]
-            )[0]
-            print(f"port: {port}")
-            current_byte_index += 2
-        if extra_data_flag & b"\x10"[0]:
-            server_id = struct.unpack(
-                "q", server_info_response[current_byte_index : current_byte_index + 8]
-            )[0]
-            print(f"server_id: {server_id}")
-            current_byte_index += 8
-        if extra_data_flag & b"\x40"[0]:
-            port = struct.unpack(
-                "h",
-                server_info_response[current_byte_index : current_byte_index + 2],
-            )[0]
-            print(f"port: {port}")
-            current_byte_index += 2
-            name, current_byte_index = get_string_from_data(
-                server_info_response, current_byte_index
-            )
-            print(f"name: {name}")
-        if extra_data_flag & b"\x20"[0]:
-            keys, current_byte_index = get_string_from_data(
-                server_info_response, current_byte_index
-            )
-        if extra_data_flag & b"\x01"[0]:
-            game_id = struct.unpack(
-                "l",
-                server_info_response[current_byte_index : current_byte_index + 8],
-            )[0]
-            print(f"game_id: {game_id} ({game_dict.get(game_id, 'Unknown')})")
+def server_sent_challenge(command):
+    return command == "0x41"
 
-    s.close()
+
+def send_challenge_response(s, response, query_byte):
+    challenge_response = b"\xff\xff\xff\xff\x54Source Engine Query\x00" + response[5:]
+    s.send(challenge_response)
 
 
 if __name__ == "__main__":
