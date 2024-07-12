@@ -1,6 +1,7 @@
 use clap::Parser;
 
 mod command_line_interface;
+mod source_query_protocol;
 
 fn main() {
     let arguments = command_line_interface::Cli::parse();
