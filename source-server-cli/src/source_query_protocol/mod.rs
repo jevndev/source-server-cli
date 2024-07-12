@@ -1,5 +1,9 @@
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 
+mod commands {
+    pub mod player_info;
+}
+
 pub struct ServerConnection {
     socket: UdpSocket,
 }
