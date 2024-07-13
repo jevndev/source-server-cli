@@ -114,4 +114,11 @@ mod tests {
         // TODO: make this actually check that the returned players are accurate
         assert!(player_info.players.len() == 2);
     }
+
+    #[test]
+    fn from_bytes_should_return_error_when_bytearray_size_doesnt_match_zero_playercount() {
+        let payload: Vec<u8> = vec![PLAYER_INFO_RETURN_COMMAND, 0x00, 0x01];
+        let result = PlayersInfo::from_bytes(payload);
+        assert!(result.is_err());
+    }
 }
