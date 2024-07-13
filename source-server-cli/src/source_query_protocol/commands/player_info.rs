@@ -44,8 +44,16 @@ impl<'a> ByteArrayWithExtraction<'a> {
         return Ok(value);
     }
 
-    fn extract_string(&mut self, max_size: usize) -> Result<&'a str, ()> {
-        // Stub for actual logic
+    fn extract_string(&mut self, max_size: usize) -> Result<String, ()> {
+        let ending_index = self._bytes.len().min(max_size + self.index);
+        for string_index in self.index..ending_index {
+            if self._bytes[string_index] == 0x00 {
+                let resultant_string_bytes = &self._bytes[self.index..string_index + 1];
+                self.index += string_index + 1;
+                return Ok(String::from_utf8_lossy(resultant_string_bytes).into_owned());
+            }
+        }
+
         return Err(());
     }
 }
