@@ -194,4 +194,54 @@ mod tests {
         let result = PlayersInfo::from_bytes(&payload);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn extract_string_from_bytes_should_return_error_for_empty_bytearray() {
+        let _bytes: [u8; 0] = [];
+        let mut byte_array = ByteArrayWithExtraction::new(&_bytes);
+        const MAX_SIZE_GREATER_THAN_ZERO: usize = 1;
+        let extracted_string = byte_array.extract_string(MAX_SIZE_GREATER_THAN_ZERO);
+        assert!(extracted_string.is_err());
+    }
+
+    #[test]
+    fn extract_string_from_bytes_should_return_empty_string_for_bytearray_of_only_null_terminator()
+    {
+        let _bytes: [u8; 1] = [0x00];
+        let mut byte_array = ByteArrayWithExtraction::new(&_bytes);
+        const MAX_SIZE_GREATER_THAN_1: usize = 2;
+        let extracted_string = byte_array.extract_string(MAX_SIZE_GREATER_THAN_1);
+        assert!(extracted_string.is_ok_and(|string| !string.is_empty()));
+    }
+
+    #[test]
+    fn extract_string_from_bytes_should_return_error_if_no_string_found_in_bytearray() {
+        const STRING_WITHOUT_NULL_TERMINATOR: [u8; 2] = ['a' as u8, 'b' as u8];
+        const MAX_SIZE_LARGER_THAN_STRING_LENGTH: usize = STRING_WITHOUT_NULL_TERMINATOR.len() + 1;
+        let mut byte_array = ByteArrayWithExtraction::new(&STRING_WITHOUT_NULL_TERMINATOR);
+        let extracted_string = byte_array.extract_string(MAX_SIZE_LARGER_THAN_STRING_LENGTH);
+        assert!(extracted_string.is_err());
+    }
+
+    #[test]
+    fn extract_string_from_bytes_should_return_error_if_no_string_found_in_bytearray_before_max_size(
+    ) {
+        const STRING_WITHOUT_NULL_TERMINATOR: [u8; 2] = ['a' as u8, 'b' as u8];
+        const MAX_SIZE_SMALLER_THAN_STRING_LENGTH: usize = STRING_WITHOUT_NULL_TERMINATOR.len() - 1;
+        let mut byte_array = ByteArrayWithExtraction::new(&STRING_WITHOUT_NULL_TERMINATOR);
+        let extracted_string = byte_array.extract_string(MAX_SIZE_SMALLER_THAN_STRING_LENGTH);
+        assert!(extracted_string.is_err());
+    }
+
+    #[test]
+    fn extract_string_from_bytes_should_return_same_string_as_input() {
+        const INPUT_STRING: &str = "Hello World\0";
+        let input_bytes = INPUT_STRING.as_bytes();
+
+        let mut byte_array = ByteArrayWithExtraction::new(input_bytes);
+        const MAX_SIZE_LONGER_THAN_STRING_LENGTH: usize = INPUT_STRING.len() + 1;
+        let extracted_string = byte_array.extract_string(MAX_SIZE_LONGER_THAN_STRING_LENGTH);
+
+        assert!(extracted_string.is_ok_and(|string| string == INPUT_STRING));
+    }
 }
