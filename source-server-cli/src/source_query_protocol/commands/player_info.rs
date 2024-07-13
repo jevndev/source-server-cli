@@ -13,7 +13,7 @@ pub struct PlayersInfo {
 }
 
 impl PlayersInfo {
-    pub fn from_bytes(_bytes: Vec<u8>) -> Result<PlayersInfo, ()> {
+    pub fn from_bytes(_bytes: &[u8]) -> Result<PlayersInfo, ()> {
         return Err(());
     }
 }
