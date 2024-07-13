@@ -12,6 +12,43 @@ pub struct PlayersInfo {
     players: Vec<PlayerInfo>,
 }
 
+struct ByteArrayWithExtraction<'a> {
+    _bytes: &'a [u8],
+    index: usize,
+}
+
+impl<'a> ByteArrayWithExtraction<'a> {
+    pub fn new(_bytes: &'a [u8]) -> ByteArrayWithExtraction {
+        return ByteArrayWithExtraction { _bytes, index: 0 };
+    }
+
+    fn extract_u8(&mut self) -> Result<u8, ()> {
+        if self.index >= self._bytes.len() {
+            return Err(());
+        }
+
+        let value = self._bytes[self.index];
+        self.index += 1;
+        Ok(value)
+    }
+
+    fn extract_u64(&mut self) -> Result<u64, ()> {
+        if self.index >= self._bytes.len() {
+            return Err(());
+        }
+
+        let bytes: [u8; 8] = self._bytes[self.index..self.index + 8].try_into().unwrap();
+        let value = u64::from_le_bytes(bytes);
+        self.index += 8;
+        return Ok(value);
+    }
+
+    fn extract_string(&mut self, max_size: usize) -> Result<&'a str, ()> {
+        // Stub for actual logic
+        return Err(());
+    }
+}
+
 impl PlayersInfo {
     pub fn from_bytes(_bytes: &[u8]) -> Result<PlayersInfo, ()> {
         return Err(());
