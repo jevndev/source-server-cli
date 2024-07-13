@@ -1,6 +1,7 @@
 use chrono::TimeDelta;
 
 const PLAYER_INFO_RETURN_COMMAND: u8 = 0x44;
+const PLAYER_NAME_MAX_SIZE: usize = 32;
 
 pub struct PlayerInfo {
     name: String,
@@ -51,7 +52,42 @@ impl<'a> ByteArrayWithExtraction<'a> {
 
 impl PlayersInfo {
     pub fn from_bytes(_bytes: &[u8]) -> Result<PlayersInfo, ()> {
-        return Err(());
+        if _bytes.len() < 2 {
+            return Err(());
+        }
+
+        let mut byte_array = ByteArrayWithExtraction::new(_bytes);
+
+        let command = byte_array.extract_u8()?;
+        if command != PLAYER_INFO_RETURN_COMMAND {
+            return Err(());
+        }
+
+        let player_count = byte_array.extract_u8()?;
+
+        if player_count != 0 && _bytes.len() == 2 {
+            return Err(());
+        }
+
+        if player_count == 0 && _bytes.len() > 2 {
+            return Err(());
+        }
+
+        let mut players: Vec<PlayerInfo> = vec![];
+
+        for _ in 0..player_count {
+            let _player_chunk_index = byte_array.extract_u8()?;
+            let player_name = byte_array.extract_string(PLAYER_NAME_MAX_SIZE)?;
+            let player_score = byte_array.extract_u64()?;
+
+            players.extend([PlayerInfo {
+                name: player_name,
+                score: player_score,
+                duration: TimeDelta::max_value(),
+            }]);
+        }
+
+        return Ok(PlayersInfo { players });
     }
 }
 
