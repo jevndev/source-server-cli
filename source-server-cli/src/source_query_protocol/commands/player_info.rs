@@ -23,6 +23,8 @@ impl<'a> ByteArrayWithExtraction<'a> {
         return ByteArrayWithExtraction { _bytes, index: 0 };
     }
 
+    // TODO: Refactor this to use generics once I figure out how rust generics work
+
     fn extract_u8(&mut self) -> Result<u8, ()> {
         if self.index >= self._bytes.len() {
             return Err(());
@@ -44,6 +46,17 @@ impl<'a> ByteArrayWithExtraction<'a> {
         return Ok(value);
     }
 
+    fn extract_f32(&mut self) -> Result<f32, ()> {
+        if self.index >= self._bytes.len() {
+            return Err(());
+        }
+
+        let bytes: [u8; 4] = self._bytes[self.index..self.index + 4].try_into().unwrap();
+        let value = f32::from_le_bytes(bytes);
+        self.index += 4;
+        return Ok(value);
+    }
+
     fn extract_string(&mut self, max_size: usize) -> Result<String, ()> {
         let ending_index = self._bytes.len().min(max_size + self.index);
         for string_index in self.index..ending_index {
@@ -55,6 +68,10 @@ impl<'a> ByteArrayWithExtraction<'a> {
         }
 
         return Err(());
+    }
+
+    fn exhausted(&self) -> bool {
+        return self.index >= self._bytes.len();
     }
 }
 
@@ -87,12 +104,23 @@ impl PlayersInfo {
             let _player_chunk_index = byte_array.extract_u8()?;
             let player_name = byte_array.extract_string(PLAYER_NAME_MAX_SIZE)?;
             let player_score = byte_array.extract_u64()?;
+            let player_duration_seconds = byte_array.extract_f32()?;
+
+            let player_duration = TimeDelta::new(player_duration_seconds as i64, 0);
+
+            if player_duration.is_none() {
+                return Err(());
+            }
 
             players.extend([PlayerInfo {
                 name: player_name,
                 score: player_score,
-                duration: TimeDelta::max_value(),
+                duration: player_duration.unwrap(),
             }]);
+        }
+
+        if !byte_array.exhausted() {
+            return Err(());
         }
 
         return Ok(PlayersInfo { players });
@@ -122,7 +150,7 @@ mod tests {
                 0x00,
                 &player.name,
                 player.score,
-                0.0,
+                player.duration.num_seconds() as f32,
             ));
         }
 
