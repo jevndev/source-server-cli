@@ -50,30 +50,30 @@ mod tests {
 
     #[test]
     fn from_bytes_should_return_error_when_no_bytes_provided() {
-        let input_bytes: Vec<u8> = vec![];
-        let result = PlayersInfo::from_bytes(input_bytes);
+        let input_bytes: [u8; 0] = [];
+        let result = PlayersInfo::from_bytes(&input_bytes);
         assert!(result.is_err())
     }
 
     #[test]
     fn from_bytes_should_return_error_when_header_has_invalid_command_flag() {
         let invalid_return_command_byte = PLAYER_INFO_RETURN_COMMAND + 1;
-        let payload = vec![invalid_return_command_byte];
-        let result = PlayersInfo::from_bytes(payload);
+        let payload = [invalid_return_command_byte];
+        let result = PlayersInfo::from_bytes(&payload);
         assert!(result.is_err());
     }
 
     #[test]
     fn from_bytes_should_return_error_when_missing_player_count() {
-        let payload = vec![PLAYER_INFO_RETURN_COMMAND];
-        let result = PlayersInfo::from_bytes(payload);
+        let payload = [PLAYER_INFO_RETURN_COMMAND];
+        let result = PlayersInfo::from_bytes(&payload);
         assert!(result.is_err());
     }
 
     #[test]
     fn from_bytes_should_return_empty_player_list_when_playercount_is_zero() {
-        let payload: Vec<u8> = vec![PLAYER_INFO_RETURN_COMMAND, 0x00];
-        let result = PlayersInfo::from_bytes(payload);
+        let payload = [PLAYER_INFO_RETURN_COMMAND, 0x00];
+        let result = PlayersInfo::from_bytes(&payload);
         assert!(result.is_ok_and(|players_info| players_info.players.is_empty()));
     }
 
@@ -86,7 +86,7 @@ mod tests {
         payload.extend(player_a_data);
         payload.extend(player_b_data);
 
-        let result = PlayersInfo::from_bytes(payload);
+        let result = PlayersInfo::from_bytes(payload.as_slice());
         assert!(result.is_err());
     }
 
@@ -105,7 +105,7 @@ mod tests {
             },
         ]);
 
-        let result = PlayersInfo::from_bytes(payload);
+        let result = PlayersInfo::from_bytes(payload.as_slice());
 
         assert!(result.is_ok());
 
@@ -117,8 +117,8 @@ mod tests {
 
     #[test]
     fn from_bytes_should_return_error_when_bytearray_size_doesnt_match_zero_playercount() {
-        let payload: Vec<u8> = vec![PLAYER_INFO_RETURN_COMMAND, 0x00, 0x01];
-        let result = PlayersInfo::from_bytes(payload);
+        let payload = [PLAYER_INFO_RETURN_COMMAND, 0x00, 0x01];
+        let result = PlayersInfo::from_bytes(&payload);
         assert!(result.is_err());
     }
 }
