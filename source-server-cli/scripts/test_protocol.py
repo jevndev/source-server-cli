@@ -5,6 +5,7 @@ import datetime
 import socket
 import struct
 import sys
+import typing
 
 import rich.table
 from rich import print
@@ -212,6 +213,30 @@ def get_string_from_data(data, start):
     return data[start:end].decode("utf-8"), end + 1
 
 
+class PlayerTableData:
+    sort_key_getters: typing.Dict[str, SortKeyGetter] = {
+        "name": lambda k: k.name,
+        "points": lambda k: k.points,
+        "playtime": lambda k: k.playtime,
+    }
+
+    def __init__(self, name: str, points: int, playtime: datetime.timedelta):
+        self.name = name
+        self.points = points
+        self.playtime = playtime
+
+    @staticmethod
+    def get_sortable_keys() -> typing.Iterable[str]:
+        return PlayerTableData.sort_key_getters.keys()
+
+    @staticmethod
+    def get_sort_key_getter(key_name: str) -> SortKeyGetter:
+        return PlayerTableData.sort_key_getters[key_name]
+
+
+SortKeyGetter = typing.Callable[[PlayerTableData], typing.Any]
+
+
 def main():
     ip, port = sys.argv[1:3]
 
@@ -220,7 +245,21 @@ def main():
     parser.add_argument("ip", type=str, help="IP address of the server")
     parser.add_argument("port", type=int, help="Port of the server")
     parser.add_argument(
-        "query", choices=["info", "players"], help="Query type", type=str.lower
+        "--color",
+        action="store_true",
+        help="Force color (useful for `watch`-ing the command)",
+    )
+    subparsers = parser.add_subparsers(dest="query", required=True)
+
+    info_parser = subparsers.add_parser("info", help="Query server info")
+
+    players_parser = subparsers.add_parser("players", help="Query server players")
+
+    players_parser.add_argument(
+        "--sortby",
+        choices=("name", "points", "playtime"),
+        default="points",
+        type=str.lower,
     )
 
     args = parser.parse_args()
@@ -245,7 +284,9 @@ def main():
             process_server_info_command(s)
         elif args.query == "players":
             send_players_challenge_response(s, response)
-            process_server_players_command(s)
+            process_server_players_command(
+                s, PlayerTableData.get_sort_key_getter(args.sortby)
+            )
 
     s.close()
 
@@ -255,7 +296,9 @@ def send_players_challenge_response(s, response):
     s.send(challenge_response)
 
 
-def process_server_players_command(s):
+def process_server_players_command(
+    s, sort_key: SortKeyGetter, force_color: bool = True
+):
     server_players_response = s.recv(4096 * 100)
     header = server_players_response[:5]
     assert header == b"\xff\xff\xff\xff\x44", header
@@ -267,6 +310,8 @@ def process_server_players_command(s):
     table.add_column("Name", justify="left", style="cyan", no_wrap=True)
     table.add_column("Score", style="magenta", justify="center")
     table.add_column("Playtime", justify="center", style="green")
+
+    players: typing.List[PlayerTableData] = []
 
     for i in range(player_count):
         last_byte_index = current_byte_index
@@ -290,17 +335,26 @@ def process_server_players_command(s):
         )
         current_byte_index += 4
 
-        hours = duration.seconds // 3600
-        minutes = (duration.seconds % 3600) // 60
-        seconds = duration.seconds % 60
+        players.append(PlayerTableData(name, score, duration))
 
+    sorted_players = sorted(players, key=sort_key, reverse=True)
+
+    for player in sorted_players:
         table.add_row(
-            name,
-            str(score),
-            f"{hours:02}:{minutes:02}:{seconds:02}",
+            player.name, str(player.points), format_player_playtime(player.playtime)
         )
 
-    print(table)
+    console = rich.console.Console(force_terminal=force_color)
+
+    console.print(table)
+
+
+def format_player_playtime(playtime: datetime.timedelta) -> str:
+    hours = playtime.seconds // 3600
+    minutes = (playtime.seconds % 3600) // 60
+    seconds = playtime.seconds % 60
+
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
 def process_server_info_command(s):
