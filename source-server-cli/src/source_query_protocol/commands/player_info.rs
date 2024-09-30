@@ -62,7 +62,7 @@ impl<'a> ByteArrayWithExtraction<'a> {
         for string_index in self.index..ending_index {
             if self._bytes[string_index] == 0x00 {
                 let resultant_string_bytes = &self._bytes[self.index..string_index + 1];
-                self.index += string_index + 1;
+                self.index = string_index + 1;
                 return Ok(String::from_utf8_lossy(resultant_string_bytes).into_owned());
             }
         }
@@ -134,6 +134,7 @@ mod tests {
     fn make_player_data_bytes(index: u8, name: &str, score: u64, duration: f32) -> Vec<u8> {
         let mut player_data = vec![index];
         player_data.extend(name.as_bytes());
+        player_data.push(0x00);
         player_data.extend(score.to_le_bytes());
         player_data.extend(duration.to_le_bytes());
         return player_data;
@@ -247,7 +248,10 @@ mod tests {
         let mut byte_array = ByteArrayWithExtraction::new(&_bytes);
         const MAX_SIZE_GREATER_THAN_1: usize = 2;
         let extracted_string = byte_array.extract_string(MAX_SIZE_GREATER_THAN_1);
-        assert!(extracted_string.is_ok_and(|string| !string.is_empty()));
+
+        // assert that the string is okay and is only the null terminator
+        assert!(extracted_string.is_ok());
+        assert_eq!(extracted_string.unwrap(), "\0");
     }
 
     #[test]
@@ -278,6 +282,10 @@ mod tests {
         const MAX_SIZE_LONGER_THAN_STRING_LENGTH: usize = INPUT_STRING.len() + 1;
         let extracted_string = byte_array.extract_string(MAX_SIZE_LONGER_THAN_STRING_LENGTH);
 
-        assert!(extracted_string.is_ok_and(|string| string == INPUT_STRING));
+        assert!(extracted_string.is_ok());
+
+        let result_string = extracted_string.unwrap();
+
+        assert_eq!(result_string, INPUT_STRING);
     }
 }
